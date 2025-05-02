@@ -1,20 +1,20 @@
-[project]
+[tool.poetry]
 name = "oxford-genai-llmops-project"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "Your Name",email = "you@example.com"}
-]
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
+description = "A microservice for Retrieval-Augmented Generation over scientific abstracts"
+authors = ["Geoffrey <jameslambert062@gmail.com>"]
+
+# Tell Poetry where to find your package
+packages = [
+  { include = "oxford_genai_llmops_project", from = "src" }
 ]
 
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
-
