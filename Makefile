@@ -1,50 +1,50 @@
 # Makefile for Oxford GenAI LLMOps Project
 
-# -----------------------------------------------------------------------------
-# 1. Install all dependencies (including dev dependencies)
-# -----------------------------------------------------------------------------
+# Load .env from project root if present
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
+# ──────────────────────────────────────────────────────────────
+# 1. Install all Python dependencies (including dev)
+# ──────────────────────────────────────────────────────────────
 install:
-	poetry install
+	poetry install --no-interaction
 
-# -----------------------------------------------------------------------------
-# 2. Run unit tests only
-# -----------------------------------------------------------------------------
-.PHONY: test-unit
-test-unit:
-	poetry install --no-root
-	poetry run pytest -q
-
-# -----------------------------------------------------------------------------
-# 3. Launch the FastAPI application with auto-reload
-# -----------------------------------------------------------------------------
-.PHONY: run-app
-run-app:
-	poetry install --no-root
-	poetry run uvicorn oxford_genai_llmops_project.main:app \
-		--reload --host 0.0.0.0 --port 8000
-
-# -----------------------------------------------------------------------------
-# 4. Build & start the Postgres + pgvector container
-# -----------------------------------------------------------------------------
-.PHONY: build-db
-build-db:
+# ──────────────────────────────────────────────────────────────
+# 2. Build & launch Postgres + pgvector
+# ──────────────────────────────────────────────────────────────
+run-postgres:
 	docker-compose --env-file .env \
 		-f rag-app/deploy/docker/postgres/docker-compose.yaml \
-		up --build
+		up --build -d
 
-# -----------------------------------------------------------------------------
-# 5. Spin up Ollama (local LLM) container
-# -----------------------------------------------------------------------------
-.PHONY: run-ollama
-run-ollama:
+# ──────────────────────────────────────────────────────────────
+# 3. Download sample papers JSONs (80 total)
+# ──────────────────────────────────────────────────────────────
+download-data:
+	cd rag-app && poetry run python ./server/src/ingestion/arxiv_client.py
+
+# ──────────────────────────────────────────────────────────────
+# 4. Ingest downloaded JSON → Postgres papers table
+# ──────────────────────────────────────────────────────────────
+run-ingestion:
+	cd rag-app && poetry run python ./server/src/ingestion/pipeline.py
+
+# ──────────────────────────────────────────────────────────────
+# 5. Verify ingestion in containerized Postgres
+# ──────────────────────────────────────────────────────────────
+verify-ingestion:
+	@echo "Counting rows in papers table:"
+	docker exec -it postgres-postgres-1 \
+	  psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT COUNT(*) FROM papers;"
+
+# ──────────────────────────────────────────────────────────────
+# 6. (Optional) Tear down Postgres
+# ──────────────────────────────────────────────────────────────
+down-postgres:
 	docker-compose --env-file .env \
-		-f rag-app/deploy/docker/ollama/docker-compose.yaml \
-		up --build
+		-f rag-app/deploy/docker/postgres/docker-compose.yaml down
 
-# -----------------------------------------------------------------------------
-# 6. Tear down all infra (DB + Ollama)
-# -----------------------------------------------------------------------------
-.PHONY: down
-down:
-	docker-compose -f rag-app/deploy/docker/postgres/docker-compose.yaml down || true
-	docker-compose -f rag-app/deploy/docker/ollama/docker-compose.yaml down  || true
+.PHONY: install run-postgres download-data run-ingestion verify-ingestion down-postgres
