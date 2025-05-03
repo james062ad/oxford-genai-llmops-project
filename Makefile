@@ -1,40 +1,50 @@
-# Makefile
+# Makefile for Oxford GenAI LLMOps Project
 
-# include any .env in the root to pick up POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
--include .env
+# -----------------------------------------------------------------------------
+# 1. Install all dependencies (including dev dependencies)
+# -----------------------------------------------------------------------------
+install:
+	poetry install
 
-# defaults
-POSTGRES_USER ?= postgres
-POSTGRES_PASSWORD ?= postgres
-POSTGRES_DB ?= postgres
-POSTGRES_PORT ?= 5432
+# -----------------------------------------------------------------------------
+# 2. Run unit tests only
+# -----------------------------------------------------------------------------
+.PHONY: test-unit
+test-unit:
+	poetry install --no-root
+	poetry run pytest -q
 
-.PHONY: build-db start-db stop-db db-status
+# -----------------------------------------------------------------------------
+# 3. Launch the FastAPI application with auto-reload
+# -----------------------------------------------------------------------------
+.PHONY: run-app
+run-app:
+	poetry install --no-root
+	poetry run uvicorn oxford_genai_llmops_project.main:app \
+		--reload --host 0.0.0.0 --port 8000
 
-# 1. Build the Postgres + pgvector image
+# -----------------------------------------------------------------------------
+# 4. Build & start the Postgres + pgvector container
+# -----------------------------------------------------------------------------
+.PHONY: build-db
 build-db:
-	@echo "🔧 Building PostgreSQL + pgvector image..."
-	docker build \
-	  --file pgvector2.Dockerfile \
-	  --tag oxford-genai-db:latest \
-	  .
+	docker-compose --env-file .env \
+		-f rag-app/deploy/docker/postgres/docker-compose.yaml \
+		up --build
 
-# 2. Start it (detached)
-start-db: build-db
-	@echo "🚀 Starting database container..."
-	docker run --rm -d \
-	  --name oxford-genai-db \
-	  -e POSTGRES_USER=$(POSTGRES_USER) \
-	  -e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
-	  -e POSTGRES_DB=$(POSTGRES_DB) \
-	  -p $(POSTGRES_PORT):5432 \
-	  oxford-genai-db:latest
+# -----------------------------------------------------------------------------
+# 5. Spin up Ollama (local LLM) container
+# -----------------------------------------------------------------------------
+.PHONY: run-ollama
+run-ollama:
+	docker-compose --env-file .env \
+		-f rag-app/deploy/docker/ollama/docker-compose.yaml \
+		up --build
 
-# 3. Stop it
-stop-db:
-	@echo "🛑 Stopping database container..."
-	docker stop oxford-genai-db || true
-
-# 4. Check status
-db-status:
-	@docker ps --filter "name=oxford-genai-db"
+# -----------------------------------------------------------------------------
+# 6. Tear down all infra (DB + Ollama)
+# -----------------------------------------------------------------------------
+.PHONY: down
+down:
+	docker-compose -f rag-app/deploy/docker/postgres/docker-compose.yaml down || true
+	docker-compose -f rag-app/deploy/docker/ollama/docker-compose.yaml down  || true
