@@ -1,50 +1,45 @@
-# Makefile for Oxford GenAI LLMOps Project
+# rag-app/Makefile
 
-# -----------------------------------------------------------------------------
-# 1. Install all dependencies (including dev dependencies)
-# -----------------------------------------------------------------------------
 install:
 	poetry install
 
-# -----------------------------------------------------------------------------
-# 2. Run unit tests only
-# -----------------------------------------------------------------------------
-.PHONY: test-unit
-test-unit:
-	poetry install --no-root
+run-app:
+	poetry run uvicorn server.src.main:app --reload --host 0.0.0.0 --port 8000
+
+test:
 	poetry run pytest -q
 
-# -----------------------------------------------------------------------------
-# 3. Launch the FastAPI application with auto-reload
-# -----------------------------------------------------------------------------
-.PHONY: run-app
-run-app:
-	poetry install --no-root
-	poetry run uvicorn oxford_genai_llmops_project.main:app \
-		--reload --host 0.0.0.0 --port 8000
-
-# -----------------------------------------------------------------------------
-# 4. Build & start the Postgres + pgvector container
-# -----------------------------------------------------------------------------
-.PHONY: build-db
 build-db:
-	docker-compose --env-file .env \
-		-f rag-app/deploy/docker/postgres/docker-compose.yaml \
-		up --build
+	docker-compose -f deploy/docker/postgres/docker-compose.yaml --env-file .env up -d --build
 
-# -----------------------------------------------------------------------------
-# 5. Spin up Ollama (local LLM) container
-# -----------------------------------------------------------------------------
-.PHONY: run-ollama
+remove-db:
+	docker-compose -f deploy/docker/postgres/docker-compose.yaml --env-file .env down
+
+build-ollama:
+	docker-compose -f deploy/docker/llm-server/docker-compose.yml build
+
 run-ollama:
-	docker-compose --env-file .env \
-		-f rag-app/deploy/docker/ollama/docker-compose.yaml \
-		up --build
+	docker-compose -f deploy/docker/llm-server/docker-compose.yml up -d
 
-# -----------------------------------------------------------------------------
-# 6. Tear down all infra (DB + Ollama)
-# -----------------------------------------------------------------------------
-.PHONY: down
-down:
-	docker-compose -f rag-app/deploy/docker/postgres/docker-compose.yaml down || true
-	docker-compose -f rag-app/deploy/docker/ollama/docker-compose.yaml down  || true
+remove-ollama:
+	docker-compose -f deploy/docker/llm-server/docker-compose.yml down
+
+download-data:
+	poetry run python ./rag-app/server/src/ingestion/arxiv_client.py
+
+run-ingestion:
+	poetry run python ./rag-app/server/src/ingestion/pipeline.py
+
+test-unit:
+	poetry run pytest -q Tests/
+
+aws-list-models:
+	aws bedrock list-foundation-models --region us-east-1
+
+aws-invoke-test:
+	aws bedrock invoke-model \
+	--model-id amazon.titan-text-express-v1 \
+	--region us-east-1 \
+	--body '{"inputText": "What is perovskite?"}' \
+	--content-type application/json \
+	--accept application/json
